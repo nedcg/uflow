@@ -34,7 +34,7 @@ graph TD
     Start([Start Execute]) --> E1
 
     %% Enter Phase
-    subgraph Enter Phase (FIFO)
+    subgraph EnterPhase ["Enter Phase (FIFO)"]
         E1["Interceptor A: Enter()"]
         E2["Interceptor B: Enter()"]
         E3["Interceptor C: Enter()"]
@@ -46,7 +46,7 @@ graph TD
     E3 -- Success --> LeavePhase
 
     %% Leave Phase
-    subgraph Leave Phase (LIFO)
+    subgraph LeavePhase ["Leave Phase (LIFO)"]
         L3["Interceptor C: Leave()"]
         L2["Interceptor B: Leave()"]
         L1["Interceptor A: Leave()"]
@@ -59,7 +59,7 @@ graph TD
     L1 -- Success --> End([Pipeline Completed])
 
     %% Error Phase
-    subgraph Error Phase (LIFO)
+    subgraph ErrorPhase ["Error Phase (LIFO)"]
         Err3["Interceptor C: Error()"]
         Err2["Interceptor B: Error()"]
         Err1["Interceptor A: Error()"]

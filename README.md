@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Juzu Logo" width="250" height="250" />
+</p>
+
 # Juzu ── Type-Safe, 3-Phase Interceptor Pipeline Engine for Go
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/nedcg/juzu.svg)](https://pkg.go.dev/github.com/nedcg/juzu)

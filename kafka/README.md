@@ -105,15 +105,15 @@ A key-value state store recording the poisoned status of business groups (`Group
 * **`segment.ms`**: `600000` (10 minutes) or lower.
   * *Reason:* Forces Kafka to roll log segments quickly, which triggers compaction much sooner.
 
-### 4. Recommended Topic Naming Conventions
-Derived topics (DLQ and Compacted State) should be named relative to your existing main topic to maintain clarity and structure.
+### 4. Derived Topic Naming Conventions
+Derived topics (DLQ and Compacted State) should be named relative to your existing main topic to maintain clarity and structure. 
+
+The DLQ topic name is **automatically derived** per message as `<original_topic_name>-dlq`.
 
 | Topic Role | Naming Pattern | Example (Given Main Topic: `prod.orders`) |
 | :--- | :--- | :--- |
-| **DLQ** | `<main_topic_name>.dlq` | `prod.orders.dlq` |
+| **DLQ (Derived)** | `<main_topic_name>-dlq` | `prod.orders-dlq` |
 | **Compacted State** | `<main_topic_name>.poison-state` | `prod.orders.poison-state` |
-
-*Using dots (`.`) or dashes (`-`) consistently is recommended (dots are preferred in enterprise setups to allow wildcard ACLs like `prod.orders.*`).*
 
 ---
 
@@ -184,8 +184,9 @@ func main() {
 	config.Producer.Transaction.ID = "my-transactional-producer"
 
 	producer, _ := sarama.NewSyncProducer([]string{"localhost:9092"}, config)
+	saramaProducer := saramax.NewSaramaProducer(producer)
 	
-	// Get Group ID extractor
+	// Get Group ID extractor (optional, defaults to string(msg.Key))
 	getGroupID := func(msg kafka.Message) string {
 		var event UserEvent
 		_ = json.Unmarshal(msg.Value, &event)
@@ -199,15 +200,18 @@ func main() {
 		ProcessUserEvent,
 	}
 
-	handler := kafka.NewConsumerGroupHandler(
-		"my-group",
-		producer,
-		pipeline,
-		"my-topic-dlq",
-		"my-compacted-state-topic",
-		getGroupID,
-		true, // Use Transactions (EOS)
-		100,  // Max Batch Size
+	genericConsumer := kafka.NewBatchConsumer(kafka.BatchConsumerConfig{
+		GroupID:         "my-group",
+		Producer:        saramaProducer,
+		Pipeline:        pipeline,
+		StateTopic:      "my-compacted-state-topic",
+		GetGroupID:      getGroupID,
+		UseTransactions: true, // Use Transactions (EOS)
+	})
+
+	handler := saramax.NewConsumerGroupHandler(
+		genericConsumer,
+		100, // Max Batch Size
 		50*time.Millisecond,
 	)
 

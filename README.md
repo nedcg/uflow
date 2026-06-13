@@ -2,12 +2,12 @@
   <img src="assets/logo.jpg" alt="uflow Logo" width="250" height="250" />
 </p>
 
-# uflow ── Type-Safe, 3-Phase Step Group Engine for Go
+# uflow ── Type-Safe, 3-Phase U-Shape Workflow Engine for Go
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/nedcg/uuflow.svg)](https://pkg.go.dev/github.com/nedcg/uflow)
+[![Go Reference](https://pkg.go.dev/badge/github.com/nedcg/uflow.svg)](https://pkg.go.dev/github.com/nedcg/uflow)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nedcg/uflow)](https://goreportcard.com/report/github.com/nedcg/uflow)
 
-**uflow** is an elegant, generic group engine written in Go. Inspired by the **Step Pattern** (famously used in Clojure's Pedestal framework), uflow enables you to coordinate complex, multi-stage workflows on top of any arbitrary state struct in a type-safe manner.
+**uflow** is an elegant, generic U-shape workflow engine written in Go. Inspired by the **Step Pattern** (famously used in Clojure's Pedestal framework), uflow enables you to coordinate complex, multi-stage middleware flows on top of any arbitrary state struct in a type-safe manner.
 
 uflow is designed for building middleware-heavy applications, event processing systems, data-ingestion pipelines, and transaction coordinator chains where state separation, error propagation/recovery, and dynamic scheduling are critical.
 

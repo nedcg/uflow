@@ -24,23 +24,20 @@ When you execute a group of interceptor steps, `uflow` traverses them in a **U-S
 3. **Catch Recovery**: If an error occurs anywhere, execution immediately halts and bubbles backwards through the `Catch` hooks, allowing outer steps to gracefully recover or rollback.
 
 ```text
-          [ Start ]
-              │
-      ┌───────▼───────┐
-      │ Step A: In()  │
-      └───────┬───────┘
-      ┌───────▼───────┐
-      │ Step B: In()  │
-      └───────┬───────┘
-              │             <-- [ Bottom of the U ]
-      ┌───────▼───────┐
-      │ Step B: Out() │
-      └───────┬───────┘
-      ┌───────▼───────┐
-      │ Step A: Out() │
-      └───────┬───────┘
-              │
-          [ Done ]
+[ Start ]                              [ Done ]
+    │                                     ▲
+    ▼                                     │
+┌──────────────┐                  ┌───────────────┐
+│ Step A: In() │                  │ Step A: Out() │
+└──────┬───────┘                  └───────▲───────┘
+       │                                  │
+       ▼                                  │
+┌──────────────┐                  ┌───────────────┐
+│ Step B: In() │                  │ Step B: Out() │
+└──────┬───────┘                  └───────▲───────┘
+       │                                  │
+       ▼                                  │
+       └───────────[ Bottom ]─────────────┘
 ```
 
 This ensures that if an interceptor allocates resources or opens a transaction during the `In` phase, it is mathematically guaranteed the opportunity to clean it up during the `Out` or `Catch` phase, regardless of what downstream steps do.

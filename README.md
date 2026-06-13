@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.jpg" alt="uflow Logo" width="250" height="250" />
+  <img src="assets/logo.png" alt="uflow Logo" width="250" height="250" />
 </p>
 
 # uflow ── Type-Safe, 3-Phase U-Shape Workflow Engine for Go

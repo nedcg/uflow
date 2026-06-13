@@ -131,6 +131,26 @@ isolatedTx := uflow.NestedIn("TxBlock",
 ### 6. Short-Circuiting (`Terminate`)
 If an interceptor decides that no further downstream processing is needed (e.g., returning a cached HTTP response), it can call `Terminate()`.
 
+This instantly halts the `In` traversal, skips all remaining downstream steps, and immediately bounces back to the `Out` traversal.
+
+```text
+[ Start ]                              [ Done ]
+    │                                     ▲
+    ▼                                     │
+┌──────────────┐                  ┌───────────────┐
+│ Step A: In() │                  │ Step A: Out() │
+└──────┬───────┘                  └───────▲───────┘
+       │                                  │
+       ▼                                  │
+┌──────────────┐  [ TERMINATE! ]  ┌───────────────┐
+│ Step B: In() ├───▶───────────▶──┤ Step B: Out() │
+└──────────────┘                  └───────────────┘
+                                  
+┌──────────────┐                  ┌───────────────┐
+│ Step C: In() │    (SKIPPED)     │ Step C: Out() │
+└──────────────┘                  └───────────────┘
+```
+
 ```go
 cacheStep := uflow.In("CacheCheck", func(r *uflow.Runner[*Context]) error {
     if cached := getCache(r.Data.Request); cached != nil {

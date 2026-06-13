@@ -160,7 +160,7 @@ mainFlow := uflow.NewGroup(
 ```
 
 ### 5. Nested Isolation (`NestedIn` / `NestedOut`)
-Sometimes you *don't* want to flatten steps. If you want an entire sub-pipeline to execute from start-to-finish entirely within the parent's `In` or `Out` phase, use `NestedIn`.
+Sometimes you *don't* want to flatten steps. If you want an entire sub-pipeline to execute from start-to-finish entirely within the parent's `In` phase, use `NestedIn`. If you need it perfectly isolated inside the `Out` phase, use `NestedOut`.
 
 ```text
 [ Start Parent ]                           [ Done Parent ]
@@ -172,15 +172,15 @@ Sometimes you *don't* want to flatten steps. If you want an entire sub-pipeline 
       │                                          │
       ▼                                          │
 ┌──────────────┐                         ┌───────────────┐
-│ NestedIn()   │                         │(Empty Out)    │
-│  ┌────────┐  │                         └───────▲───────┘
-│  │Tx: In()│  │                                 │
-│  └────┬───┘  │                                 │
-│       │      │                                 │
-│  ┌────▼────┐ │                                 │
-│  │Tx: Out()│ │                                 │
-│  └─────────┘ │                                 │
-└─────┬────────┘                                 │
+│ NestedIn()   │                         │ NestedOut()   │
+│  ┌────────┐  │                         │  ┌────────┐   │
+│  │Tx: In()│  │                         │  │Cleanup:In()│
+│  └────┬───┘  │                         │  └────┬───┘   │
+│       │      │                         │       │       │
+│  ┌────▼────┐ │                         │  ┌────▼────┐  │
+│  │Tx: Out()│ │                         │  │Cleanup:Out││
+│  └─────────┘ │                         │  └─────────┘  │
+└─────┬────────┘                         └───────▲───────┘
       │                                          │
       ▼                                          │
 ┌──────────────┐                         ┌───────────────┐

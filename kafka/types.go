@@ -45,7 +45,7 @@ type Message struct {
 // FailedMessage holds a failed message and its processing error.
 type FailedMessage struct {
 	Message Message
-	Error   error
+	Catch   error
 }
 
 // OutgoingMessage represents a message to be published atomically.
@@ -68,7 +68,7 @@ type BatchContext struct {
 func (c *BatchContext) Fail(msg Message, err error) {
 	c.FailedMessages = append(c.FailedMessages, FailedMessage{
 		Message: msg,
-		Error:   err,
+		Catch:   err,
 	})
 }
 

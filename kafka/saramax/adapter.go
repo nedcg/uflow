@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/IBM/sarama"
-	"github.com/nedcg/juzu/kafka"
+	"github.com/nedcg/uflow/kafka"
 )
 
 // SaramaSession adapts sarama.ConsumerGroupSession to kafka.Session.

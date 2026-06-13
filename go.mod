@@ -1,4 +1,4 @@
-module github.com/nedcg/juzu
+module github.com/nedcg/uflow
 
 go 1.24
 

@@ -7,7 +7,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/nedcg/juzu"
+	"github.com/nedcg/uflow"
 )
 
 // BatchConsumer processes batches of messages using Juzu pipelines and generic interfaces.
@@ -15,7 +15,7 @@ type BatchConsumer struct {
 	mu              sync.Mutex
 	groupID         string
 	producer        Producer
-	pipeline        []juzu.Interceptor[*BatchContext]
+	pipeline        []uflow.Step[*BatchContext]
 	stateTopic      string
 	getGroupID      func(Message) string
 	useTransactions bool
@@ -25,7 +25,7 @@ type BatchConsumer struct {
 type BatchConsumerConfig struct {
 	GroupID         string
 	Producer        Producer
-	Pipeline        []juzu.Interceptor[*BatchContext]
+	Group        []uflow.Step[*BatchContext]
 	StateTopic      string
 	GetGroupID      func(Message) string
 	UseTransactions bool
@@ -44,7 +44,7 @@ func NewBatchConsumer(cfg BatchConsumerConfig) *BatchConsumer {
 	return &BatchConsumer{
 		groupID:         cfg.GroupID,
 		producer:        cfg.Producer,
-		pipeline:        cfg.Pipeline,
+		pipeline:        cfg.Group,
 		stateTopic:      cfg.StateTopic,
 		getGroupID:      getGroupID,
 		useTransactions: cfg.UseTransactions,
@@ -57,7 +57,7 @@ func (c *BatchConsumer) Process(ctx context.Context, session Session, batch []Me
 		Messages: batch,
 	}
 
-	exec := juzu.NewExecution(ctx, c.pipeline, batchCtx)
+	exec := uflow.NewRunner(ctx, c.pipeline, batchCtx)
 	if err := exec.Execute(); err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (c *BatchConsumer) buildProducerMessages(ctx *BatchContext) []OutgoingMessa
 		headers["x-original-topic"] = []byte(failed.Message.Topic)
 		headers["x-original-partition"] = fmt.Appendf(nil, "%d", failed.Message.Partition)
 		headers["x-original-offset"] = fmt.Appendf(nil, "%d", failed.Message.Offset)
-		headers["x-error"] = []byte(failed.Error.Error())
+		headers["x-error"] = []byte(failed.Catch.Error())
 
 		msgs = append(msgs, OutgoingMessage{
 			Topic:   dlqTopic,
@@ -110,7 +110,7 @@ func (c *BatchConsumer) buildProducerMessages(ctx *BatchContext) []OutgoingMessa
 			msgs = append(msgs, OutgoingMessage{
 				Topic: c.stateTopic,
 				Key:   []byte(groupID),
-				Value: []byte(failed.Error.Error()),
+				Value: []byte(failed.Catch.Error()),
 			})
 		}
 	}

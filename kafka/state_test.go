@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nedcg/juzu"
-	"github.com/nedcg/juzu/kafka"
+	"github.com/nedcg/uflow"
+	"github.com/nedcg/uflow/kafka"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +25,7 @@ func TestPoisonFilterAndCascade(t *testing.T) {
 	_ = store.MarkPoisoned("GroupA", errPoisoned)
 
 	// 4. Create pipeline
-	pipeline := []juzu.Interceptor[*kafka.BatchContext]{
+	pipeline := []uflow.Step[*kafka.BatchContext]{
 		kafka.PoisonFilter(store, getGroupID),
 		kafka.WrapHandler(store, getGroupID, func(ctx *kafka.BatchContext, msg kafka.Message) error {
 			if string(msg.Value) == "fail_me" {
@@ -54,7 +54,7 @@ func TestPoisonFilterAndCascade(t *testing.T) {
 		Messages: batch,
 	}
 
-	exec := juzu.NewExecution(context.Background(), pipeline, ctx)
+	exec := uflow.NewRunner(context.Background(), pipeline, ctx)
 	err := exec.Execute()
 	require.NoError(t, err)
 
@@ -74,15 +74,15 @@ func TestPoisonFilterAndCascade(t *testing.T) {
 
 	// M1 (pre-filtered because Group A was poisoned)
 	assert.Equal(t, "m1", string(ctx.FailedMessages[0].Message.Value))
-	assert.Contains(t, ctx.FailedMessages[0].Error.Error(), "is poisoned due to previous processing failure")
+	assert.Contains(t, ctx.FailedMessages[0].Catch.Error(), "is poisoned due to previous processing failure")
 
 	// M3 (failed in handler)
 	assert.Equal(t, "fail_me", string(ctx.FailedMessages[1].Message.Value))
-	assert.Contains(t, ctx.FailedMessages[1].Error.Error(), "handler failed")
+	assert.Contains(t, ctx.FailedMessages[1].Catch.Error(), "handler failed")
 
 	// M4 (cascade-poisoned in same batch)
 	assert.Equal(t, "m4", string(ctx.FailedMessages[2].Message.Value))
-	assert.Contains(t, ctx.FailedMessages[2].Error.Error(), "poisoned due to prior batch failure")
+	assert.Contains(t, ctx.FailedMessages[2].Catch.Error(), "poisoned due to prior batch failure")
 
 	// 7. Verify Group B is now also marked as poisoned in the store
 	assert.True(t, store.IsPoisoned("GroupB"))

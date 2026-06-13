@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/nedcg/juzu"
-	"github.com/nedcg/juzu/kafka"
-	"github.com/nedcg/juzu/kafka/saramax"
+	"github.com/nedcg/uflow"
+	"github.com/nedcg/uflow/kafka"
+	"github.com/nedcg/uflow/kafka/saramax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -152,7 +152,7 @@ func TestKafkaE2E(t *testing.T) {
 	consumerConfig.Consumer.Offsets.Initial = sarama.OffsetOldest
 	consumerConfig.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRange()}
 
-	pipeline := []juzu.Interceptor[*kafka.BatchContext]{
+	pipeline := []uflow.Step[*kafka.BatchContext]{
 		kafka.PoisonFilter(stateStore, getGroupID),
 		kafka.WrapHandler(stateStore, getGroupID, businessHandler),
 	}
@@ -161,7 +161,7 @@ func TestKafkaE2E(t *testing.T) {
 	genericConsumer := kafka.NewBatchConsumer(kafka.BatchConsumerConfig{
 		GroupID:         "e2e-main-group",
 		Producer:        saramaProducerAdapter,
-		Pipeline:        pipeline,
+		Group:        pipeline,
 		StateTopic:      stateTopic,
 		UseTransactions: true,
 	})
@@ -246,7 +246,7 @@ func TestKafkaE2E(t *testing.T) {
 	defer reprocProducer.Close()
 
 	// Initialize reprocessor
-	reprocPipeline := []juzu.Interceptor[*kafka.BatchContext]{
+	reprocPipeline := []uflow.Step[*kafka.BatchContext]{
 		kafka.WrapHandler(stateStore, getGroupID, businessHandler),
 	}
 

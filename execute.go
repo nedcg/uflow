@@ -1,17 +1,17 @@
-package juzu
+package uflow
 
 // Execute runs the execution pipeline.
-func (e *Execution[T]) Execute() error {
+func (e *Runner[T]) Execute() error {
 	var err error
-	var localStack [16]Interceptor[T]
-	var stack []Interceptor[T]
+	var localStack [16]Step[T]
+	var stack []Step[T]
 	if len(e.queue) <= len(localStack) {
 		stack = localStack[:0]
 	} else {
-		stack = make([]Interceptor[T], 0, len(e.queue))
+		stack = make([]Step[T], 0, len(e.queue))
 	}
 
-	// Enter phase
+	// In phase
 	for e.index < len(e.queue) {
 		// Check for context cancellation/deadline before executing the next interceptor
 		if err = e.ctx.Err(); err != nil {
@@ -24,14 +24,14 @@ func (e *Execution[T]) Execute() error {
 		// Push to stack for leave/error phases
 		stack = append(stack, interceptor)
 
-		err = interceptor.Enter(e)
+		err = interceptor.In(e)
 		if err != nil {
 			break
 		}
 	}
 
-	// If there was an error (either from Enter hook or from Context cancellation),
-	// enter the Error phase. Otherwise, enter the Leave phase.
+	// If there was an error (either from In hook or from Context cancellation),
+	// enter the Catch phase. Otherwise, enter the Out phase.
 	if err != nil {
 		return e.executeError(stack, err)
 	}
@@ -40,7 +40,7 @@ func (e *Execution[T]) Execute() error {
 }
 
 // executeLeave runs the leave phase hooks in reverse order of entry (LIFO).
-func (e *Execution[T]) executeLeave(stack []Interceptor[T]) error {
+func (e *Runner[T]) executeLeave(stack []Step[T]) error {
 	var err error
 	for len(stack) > 0 {
 		// Check for context cancellation
@@ -53,7 +53,7 @@ func (e *Execution[T]) executeLeave(stack []Interceptor[T]) error {
 		interceptor := stack[n-1]
 		stack = stack[:n-1]
 
-		err = interceptor.Leave(e)
+		err = interceptor.Out(e)
 		if err != nil {
 			break
 		}
@@ -66,9 +66,9 @@ func (e *Execution[T]) executeLeave(stack []Interceptor[T]) error {
 }
 
 // executeError runs the error phase hooks in reverse order of entry (LIFO).
-// If any Error hook handles (resolves) the error by returning nil,
-// execution resumes in the Leave phase for the remaining stack.
-func (e *Execution[T]) executeError(stack []Interceptor[T], err error) error {
+// If any Catch hook handles (resolves) the error by returning nil,
+// execution resumes in the Out phase for the remaining stack.
+func (e *Runner[T]) executeError(stack []Step[T], err error) error {
 	activeErr := err
 
 	for len(stack) > 0 {
@@ -77,11 +77,11 @@ func (e *Execution[T]) executeError(stack []Interceptor[T], err error) error {
 		interceptor := stack[n-1]
 		stack = stack[:n-1]
 
-		// Call the Error handler
-		activeErr = interceptor.Error(e, activeErr)
+		// Call the Catch handler
+		activeErr = interceptor.Catch(e, activeErr)
 
 		// If the error handler resolved the error (returned nil),
-		// resume normal Leave phase for the rest of the stack.
+		// resume normal Out phase for the rest of the stack.
 		if activeErr == nil {
 			return e.executeLeave(stack)
 		}

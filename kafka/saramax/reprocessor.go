@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/nedcg/juzu/kafka"
+	"github.com/nedcg/uflow/kafka"
 )
 
 // Reprocessor implements sarama.ConsumerGroupHandler by delegating to a generic Reprocessor.

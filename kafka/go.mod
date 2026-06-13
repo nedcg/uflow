@@ -1,8 +1,8 @@
-module github.com/nedcg/juzu/kafka
+module github.com/nedcg/uflow/kafka
 
 go 1.25.0
 
-replace github.com/nedcg/juzu => ../
+replace github.com/nedcg/uflow => ../
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

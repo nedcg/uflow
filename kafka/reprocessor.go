@@ -6,7 +6,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/nedcg/juzu"
+	"github.com/nedcg/uflow"
 )
 
 // Reprocessor processes batches of messages from the DLQ topic and decides to either cycle them or process them.
@@ -17,7 +17,7 @@ type Reprocessor struct {
 	dlqTopic   string
 	stateStore GroupStateStore
 	producer   Producer
-	pipeline   []juzu.Interceptor[*BatchContext]
+	pipeline   []uflow.Step[*BatchContext]
 }
 
 // NewReprocessor creates a new Reprocessor.
@@ -27,7 +27,7 @@ func NewReprocessor(
 	stateStore GroupStateStore,
 	getGroupID func(Message) string,
 	producer Producer,
-	pipeline []juzu.Interceptor[*BatchContext],
+	pipeline []uflow.Step[*BatchContext],
 ) *Reprocessor {
 	return &Reprocessor{
 		groupID:    groupID,
@@ -57,7 +57,7 @@ func (r *Reprocessor) Process(ctx context.Context, session Session, batch []Mess
 
 	var err error
 	if len(batchCtx.Messages) > 0 {
-		exec := juzu.NewExecution(ctx, r.pipeline, batchCtx)
+		exec := uflow.NewRunner(ctx, r.pipeline, batchCtx)
 		err = exec.Execute()
 	}
 	if err != nil {
@@ -108,11 +108,11 @@ func (r *Reprocessor) commitReprocessing(ctx *BatchContext, txProducer TxProduce
 	// 3. Handle messages that failed processing *again*
 	for _, failed := range ctx.FailedMessages {
 		groupID := r.getGroupID(failed.Message)
-		_ = r.stateStore.MarkPoisoned(groupID, failed.Error)
+		_ = r.stateStore.MarkPoisoned(groupID, failed.Catch)
 
 		headers := make(map[string][]byte)
 		maps.Copy(headers, failed.Message.Headers)
-		headers["x-reprocess-error"] = []byte(failed.Error.Error())
+		headers["x-reprocess-error"] = []byte(failed.Catch.Error())
 
 		msgs = append(msgs, OutgoingMessage{
 			Topic:   r.dlqTopic,

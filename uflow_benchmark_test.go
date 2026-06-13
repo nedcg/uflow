@@ -1,4 +1,4 @@
-package juzu_test
+package uflow_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nedcg/juzu"
+	"github.com/nedcg/uflow"
 )
 
 type BenchState struct {
@@ -44,15 +44,15 @@ func BenchmarkBaseline(b *testing.B) {
 }
 
 func BenchmarkTypedExecution(b *testing.B) {
-	chain := make([]juzu.Interceptor[BenchState], 10)
+	chain := make([]uflow.Step[BenchState], 10)
 	for i := 0; i < 5; i++ {
-		chain[i] = juzu.Enter(fmt.Sprintf("enter-%d", i), func(e *juzu.Execution[BenchState]) error {
+		chain[i] = uflow.In(fmt.Sprintf("enter-%d", i), func(e *uflow.Runner[BenchState]) error {
 			e.Data.Count++
 			return nil
 		})
 	}
 	for i := 5; i < 10; i++ {
-		chain[i] = juzu.Leave(fmt.Sprintf("leave-%d", i), func(e *juzu.Execution[BenchState]) error {
+		chain[i] = uflow.Out(fmt.Sprintf("leave-%d", i), func(e *uflow.Runner[BenchState]) error {
 			e.Data.Count++
 			return nil
 		})
@@ -63,21 +63,21 @@ func BenchmarkTypedExecution(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		state := BenchState{}
-		exec := juzu.NewExecution(ctx, chain, state)
+		exec := uflow.NewRunner(ctx, chain, state)
 		_ = exec.Execute()
 	}
 }
 
 func BenchmarkPooledTypedExecution(b *testing.B) {
-	chain := make([]juzu.Interceptor[BenchState], 10)
+	chain := make([]uflow.Step[BenchState], 10)
 	for i := 0; i < 5; i++ {
-		chain[i] = juzu.Enter(fmt.Sprintf("enter-%d", i), func(e *juzu.Execution[BenchState]) error {
+		chain[i] = uflow.In(fmt.Sprintf("enter-%d", i), func(e *uflow.Runner[BenchState]) error {
 			e.Data.Count++
 			return nil
 		})
 	}
 	for i := 5; i < 10; i++ {
-		chain[i] = juzu.Leave(fmt.Sprintf("leave-%d", i), func(e *juzu.Execution[BenchState]) error {
+		chain[i] = uflow.Out(fmt.Sprintf("leave-%d", i), func(e *uflow.Runner[BenchState]) error {
 			e.Data.Count++
 			return nil
 		})
@@ -86,14 +86,14 @@ func BenchmarkPooledTypedExecution(b *testing.B) {
 	ctx := context.Background()
 	pool := sync.Pool{
 		New: func() any {
-			return &juzu.Execution[BenchState]{}
+			return &uflow.Runner[BenchState]{}
 		},
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		state := BenchState{}
-		exec := pool.Get().(*juzu.Execution[BenchState])
+		exec := pool.Get().(*uflow.Runner[BenchState])
 		exec.Reset(ctx, chain, state)
 		_ = exec.Execute()
 		pool.Put(exec)
@@ -101,16 +101,16 @@ func BenchmarkPooledTypedExecution(b *testing.B) {
 }
 
 func BenchmarkMapExecution(b *testing.B) {
-	chain := make([]juzu.Interceptor[map[string]any], 10)
+	chain := make([]uflow.Step[map[string]any], 10)
 	for i := 0; i < 5; i++ {
-		chain[i] = juzu.Enter(fmt.Sprintf("enter-%d", i), func(e *juzu.Execution[map[string]any]) error {
+		chain[i] = uflow.In(fmt.Sprintf("enter-%d", i), func(e *uflow.Runner[map[string]any]) error {
 			count, _ := e.Data["count"].(int)
 			e.Data["count"] = count + 1
 			return nil
 		})
 	}
 	for i := 5; i < 10; i++ {
-		chain[i] = juzu.Leave(fmt.Sprintf("leave-%d", i), func(e *juzu.Execution[map[string]any]) error {
+		chain[i] = uflow.Out(fmt.Sprintf("leave-%d", i), func(e *uflow.Runner[map[string]any]) error {
 			count, _ := e.Data["count"].(int)
 			e.Data["count"] = count + 1
 			return nil
@@ -122,7 +122,7 @@ func BenchmarkMapExecution(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		state := make(map[string]any)
-		exec := juzu.NewExecution(ctx, chain, state)
+		exec := uflow.NewRunner(ctx, chain, state)
 		_ = exec.Execute()
 	}
 }

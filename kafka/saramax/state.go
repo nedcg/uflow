@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/IBM/sarama"
-	"github.com/nedcg/juzu/kafka"
+	"github.com/nedcg/uflow/kafka"
 )
 
 // CompactedTopicStore implements kafka.GroupStateStore, backing the in-memory cache with a Kafka compacted topic.

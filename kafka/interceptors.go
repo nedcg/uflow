@@ -3,13 +3,13 @@ package kafka
 import (
 	"fmt"
 
-	"github.com/nedcg/juzu"
+	"github.com/nedcg/uflow"
 )
 
 // PoisonFilter creates a Juzu interceptor that automatically filters and skips messages
 // whose group IDs are already poisoned before any handlers execute.
-func PoisonFilter(store GroupStateStore, getGroupID func(Message) string) juzu.Interceptor[*BatchContext] {
-	return juzu.Enter("PoisonFilter", func(e *juzu.Execution[*BatchContext]) error {
+func PoisonFilter(store GroupStateStore, getGroupID func(Message) string) uflow.Step[*BatchContext] {
+	return uflow.In("PoisonFilter", func(e *uflow.Runner[*BatchContext]) error {
 		ctx := e.Data
 		var activeMessages []Message
 
@@ -34,8 +34,8 @@ type MsgHandler func(ctx *BatchContext, msg Message) error
 // If a message group is poisoned (either from previous batches or earlier in the same batch),
 // the message is skipped and routed to the DLQ. If a message fails processing, the group is
 // immediately poisoned, causing all subsequent messages for that group in the batch to be skipped.
-func WrapHandler(store GroupStateStore, getGroupID func(Message) string, h MsgHandler) juzu.Interceptor[*BatchContext] {
-	return juzu.Enter("WrapHandler", func(e *juzu.Execution[*BatchContext]) error {
+func WrapHandler(store GroupStateStore, getGroupID func(Message) string, h MsgHandler) uflow.Step[*BatchContext] {
+	return uflow.In("WrapHandler", func(e *uflow.Runner[*BatchContext]) error {
 		ctx := e.Data
 		var successfulMessages []Message
 

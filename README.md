@@ -7,97 +7,72 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/nedcg/uflow.svg)](https://pkg.go.dev/github.com/nedcg/uflow)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nedcg/uflow)](https://goreportcard.com/report/github.com/nedcg/uflow)
 
-**uflow** is an elegant, generic U-shape workflow engine written in Go. Inspired by the **Step Pattern** (famously used in Clojure's Pedestal framework), uflow enables you to coordinate complex, multi-stage middleware flows on top of any arbitrary state struct in a type-safe manner.
+**uflow** is an elegant, generic workflow engine written in Go. Instead of executing logic in a simple straight line, uflow implements a **U-Shape Execution Model** (often known as the Onion or Step pattern, popularized by Clojure's Pedestal framework).
 
-uflow is designed for building middleware-heavy applications, event processing systems, data-ingestion pipelines, and transaction coordinator chains where state separation, error propagation/recovery, and dynamic scheduling are critical.
+It enables you to coordinate complex, multi-stage middleware flows on top of any arbitrary state struct in a completely type-safe manner. 
 
----
-
-## Key Features
-
-*   **100% Type-Safe (Go Generics):** Operates on any custom state type `T` via `Runner[T]`, eliminating `interface{}` cast overhead and type-assertions.
-*   **Three-Phase Step Lifecycle:** Every step implements three distinct phases: `In` (FIFO), `Out` (LIFO), and `Catch` (LIFO).
-*   **Catch Recovery & Resolution:** Steps can catch, modify, propagate, or completely suppress (resolve) errors. Resolving an error resumes the `Out` execution phase down the remaining stack.
-*   **Dynamic Queue Control:** Steps can append new stages mid-flight via `Enqueue` or halt downstream stages entirely via `Terminate`.
-*   **Context-Aware Runner:** Built-in checks for `context.Context` cancellation or deadline expiration between stages.
-*   **High Performance / Zero Allocations:** Includes an in-place `Reset` method allowing `Runner[T]` structures to be pooled using `sync.Pool` to avoid memory allocations in high-throughput pipelines.
+uflow is designed for building middleware-heavy HTTP applications, event processing systems (Kafka/RabbitMQ), and transaction coordinator chains where state separation, guaranteed cleanup, and dynamic scheduling are critical.
 
 ---
 
-## The 3-Phase Runner Lifecycle
+## 🌊 The U-Shape Execution Model
 
-uflow runs execution pipelines in a stack-based double-pass traversal:
+Think of execution like a dive into a pool: you dive **In** (descending through your steps), hit the bottom, and then travel back **Out** (ascending through those exact same steps in reverse).
+
+If something goes wrong at any point, the pipeline immediately halts and begins moving upwards through the **Catch** phase, allowing outer steps to gracefully recover or rollback.
 
 ```mermaid
 graph TD
-    %% Define styles
-    classDef enter fill:#d4edda,stroke:#28a745,color:#155724;
-    classDef leave fill:#cce5ff,stroke:#004085,color:#004085;
+    %% Styling
+    classDef in fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef out fill:#cce5ff,stroke:#004085,color:#004085;
     classDef err fill:#f8d7da,stroke:#721c24,color:#721c24;
 
-    Start([Start Execute]) --> E1
-
-    %% In Phase
-    subgraph EnterPhase ["In Phase (FIFO)"]
-        E1["Step A: In()"]
-        E2["Step B: In()"]
-        E3["Step C: In()"]
+    Start([Start]) --> I1
+    
+    subgraph "⬇️ The 'In' Phase (Dive)"
+        I1["Step 1: In()"] --> I2["Step 2: In()"] --> I3["Step 3: In()"]
     end
-    class E1,E2,E3 enter;
-
-    E1 -- Success --> E2
-    E2 -- Success --> E3
-    E3 -- Success --> LeavePhase
-
-    %% Out Phase
-    subgraph LeavePhase ["Out Phase (LIFO)"]
-        L3["Step C: Out()"]
-        L2["Step B: Out()"]
-        L1["Step A: Out()"]
+    
+    subgraph "⬆️ The 'Out' Phase (Surface)"
+        O3["Step 3: Out()"] --> O2["Step 2: Out()"] --> O1["Step 1: Out()"]
     end
-    class L3,L2,L1 leave;
 
-    LeavePhase --> L3
-    L3 -- Success --> L2
-    L2 -- Success --> L1
-    L1 -- Success --> End([Group Completed])
-
-    %% Catch Phase
-    subgraph ErrorPhase ["Catch Phase (LIFO)"]
-        Err3["Step C: Catch()"]
-        Err2["Step B: Catch()"]
-        Err1["Step A: Catch()"]
+    subgraph "⚠️ The 'Catch' Phase (Recovery)"
+        C3["Step 3: Catch()"] --> C2["Step 2: Catch()"] --> C1["Step 1: Catch()"]
     end
-    class Err3,Err2,Err1 err;
 
-    %% In Errors
-    E1 -- Catch --> Err1
-    E2 -- Catch --> Err2
-    E3 -- Catch --> Err3
-
-    %% Out Errors
-    L3 -- Catch --> Err3
-    L2 -- Catch --> Err2
-    L1 -- Catch --> Err1
+    I3 -- "Success" --> O3
+    
+    %% Error Routing
+    I2 -. "Error!" .-> C2
+    I3 -. "Error!" .-> C3
+    O3 -. "Error!" .-> C3
+    O2 -. "Error!" .-> C2
 
     %% Catch Traversal
-    Err3 -- "Still Active" --> Err2
-    Err2 -- "Still Active" --> Err1
-    Err1 -- "Unresolved" --> ReturnErr([Return Catch])
-
+    C3 -- "Propagates" --> C2
+    C2 -- "Propagates" --> C1
+    
     %% Recovery
-    Err2 -- "Catch Resolved (returns nil)" --> L1
-    Err3 -- "Catch Resolved (returns nil)" --> L2
+    C2 -- "Error Handled! (returns nil)" --> O1
+
+    O1 --> Done([Done])
+    C1 --> Fail([Return Error])
+
+    class I1,I2,I3 in;
+    class O1,O2,O3 out;
+    class C1,C2,C3 err;
 ```
 
-1.  **In Phase (Forward / FIFO):** Executes `In` hooks sequentially down the queue. Each executed step is pushed onto a LIFO execution stack.
-2.  **Out Phase (Reverse / LIFO):** Once all `In` hooks succeed, uflow pops steps from the stack one by one, executing their `Out` hooks in reverse order.
-3.  **Catch Phase (Reverse / LIFO):** If an error occurs in any `In` or `Out` hook (or if the `context.Context` is cancelled), execution immediately halts. uflow pops steps from the stack, routing the error through their `Catch` hooks.
-    *   **Catch Recovery:** If an `Catch` hook handles/suppresses the error by returning `nil`, the group recovers! It halts the error propagation and resumes executing the `Out` phase for all remaining steps left on the stack.
+1. **In Phase (Forward / FIFO):** Executes `In` hooks sequentially down the queue. Each executed step is pushed onto a LIFO execution stack.
+2. **Out Phase (Reverse / LIFO):** Once all `In` hooks succeed, uflow pops steps from the stack one by one, executing their `Out` hooks in reverse order.
+3. **Catch Phase (Reverse / LIFO):** If an error occurs in any `In` or `Out` hook, execution immediately switches to the `Catch` phase. Steps are popped from the stack, routing the error backward through their `Catch` hooks.
+    *   **Recovery:** If a `Catch` hook handles the error and returns `nil`, the pipeline *recovers*. It safely resumes the `Out` phase for all remaining steps left on the stack.
 
 ---
 
-## Installation
+## 🚀 Installation
 
 ```bash
 go get github.com/nedcg/uflow
@@ -105,157 +80,178 @@ go get github.com/nedcg/uflow
 
 ---
 
-## Core Interfaces & Structs
+## 🧩 Building Pipelines (Step-by-Step)
 
-### 1. The Step Interface
+uflow revolves around the `Step[T]` interface, but provides incredibly ergonomic wrappers to define logic exactly where you need it.
 
-An step represents a single processing module. You can implement the interface directly:
-
+### 1. In-Only Steps
+Perfect for pre-processing, validation, or authentication.
 ```go
-type Step[T any] interface {
-	Name() string
-	In(exec *Runner[T]) error
-	Out(exec *Runner[T]) error
-	Catch(exec *Runner[T], err error) error
-}
+authStep := uflow.In("Auth", func(r *uflow.Runner[*Context]) error {
+    if r.Data.Token == "" {
+        return errors.New("unauthorized")
+    }
+    return nil
+})
 ```
 
-Or you can use `uflow.Func[T]` or helper functions (`uflow.In`, `uflow.Out`, `uflow.Error`) to create ad-hoc steps.
-
-### 2. Runner State Manager
-
-The `Runner[T]` struct maintains the execution state, the group queue, and your custom mutable data `T`:
-
+### 2. Out-Only Steps
+Perfect for post-processing, auditing, or cleanup that must happen *after* everything else has run.
 ```go
-type Runner[T any] struct {
-	Data T // Your custom state
-    // private fields...
-}
+auditStep := uflow.Out("Audit", func(r *uflow.Runner[*Context]) error {
+    fmt.Println("Pipeline finished with status:", r.Data.Status)
+    return nil
+})
 ```
 
----
+### 3. Group (Pipeline Flattening)
+You can bundle multiple steps into a reusable module using `uflow.Group`. 
 
-## Usage Examples
-
-### Example 1: Basic Group
-
-In this example, we process a HTTP-like request context, modifying the request headers in `In` and logging/auditing the status in `Out`.
+Groups are natively flattened by the `Runner`. This guarantees the U-shape "onion" ordering is perfectly preserved across boundaries.
 
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"github.com/nedcg/uflow"
+// Group multiple steps into a cohesive block
+securityModule := uflow.NewGroup(
+    rateLimitStep,
+    authStep,
+    corsStep,
 )
 
-// Define your group state
-type RequestState struct {
-	Headers map[string]string
-	Body    string
-	Status  int
-}
-
-func main() {
-	// 1. Create steps
-	authStep := uflow.In("Auth", func(e *uflow.Runner[*RequestState]) error {
-		if e.Data.Headers["Authorization"] == "" {
-			e.Data.Status = 401
-			e.Terminate() // Halt downstream group execution
-		}
-		return nil
-	})
-
-	businessLogic := uflow.In("Process", func(e *uflow.Runner[*RequestState]) error {
-		fmt.Println("Processing payload:", e.Data.Body)
-		e.Data.Status = 200
-		return nil
-	})
-
-	auditLogger := uflow.Out("AuditLog", func(e *uflow.Runner[*RequestState]) error {
-		fmt.Printf("[AuditLog] Handled request with status: %d\n", e.Data.Status)
-		return nil
-	})
-
-	// 2. Assemble the queue
-	group := []uflow.Step[*RequestState]{
-		auditLogger, // In: skipped (has no In hook), Out: runs last
-		authStep,
-		businessLogic,
-	}
-
-	// 3. Prepare state and run execution
-	state := &RequestState{
-		Headers: map[string]string{"Authorization": "Bearer token123"},
-		Body:    `{"userID": "12345"}`,
-	}
-
-	exec := uflow.NewRunner(context.Background(), group, state)
-	if err := exec.Execute(); err != nil {
-		fmt.Printf("Group failed: %v\n", err)
-	}
-}
+// You can nest Groups inside other Groups infinitely
+mainFlow := uflow.NewGroup(
+    auditStep,
+    securityModule, // Flattens seamlessly
+    businessLogicStep,
+)
 ```
 
-### Example 2: Catch Recovery
-
-uflow makes error recovery simple. Any stage's `Catch` hook can catch a downstream failure and resolve it:
+### 4. Nested Isolation (`NestedIn` / `NestedOut`)
+Sometimes you *don't* want to flatten steps. If you want an entire sub-pipeline to execute from start-to-finish entirely within the parent's `In` or `Out` phase, use `NestedIn`.
 
 ```go
-recoveryStep := &uflow.Func[MyState]{
-	Id: "Recovery",
-	CatchFunc: func(exec *uflow.Runner[MyState], err error) error {
-		fmt.Printf("Caught downstream error: %v. Recovering...\n", err)
-		// Perform recovery actions...
-		return nil // Returning nil marks the error as resolved!
-	},
-}
+isolatedTx := uflow.NestedIn("TxBlock", 
+    uflow.In("BeginTx", begin),
+    uflow.Out("CommitTx", commit),
+    uflow.Catch("RollbackTx", rollback),
+)
+
+// The parent pipeline will pause at `isolatedTx`, wait for the entire 
+// Begin -> Commit/Rollback sub-execution to finish, and then continue.
 ```
 
-If a downstream step fails, `Recovery.Error()` intercepts the error. Because it returns `nil`, uflow will resume running the `Out` hooks of all upstream steps on the stack.
-
-### Example 3: Dynamic Scheduling
-
-Steps can add steps to the queue dynamically based on runtime conditions:
+### 5. Short-Circuiting (`Terminate`)
+If a step decides that no further downstream processing is needed (e.g., returning a cached HTTP response), it can call `Terminate()`.
 
 ```go
-injector := uflow.In("DynamicStep", func(e *uflow.Runner[*MyState]) error {
-	if e.Data.NeedsCompacting {
-		// Enqueue the compaction step to run right after this hook finishes
-		e.Enqueue(compactionStep)
-	}
-	return nil
+cacheStep := uflow.In("CacheCheck", func(r *uflow.Runner[*Context]) error {
+    if cached := getCache(r.Data.Request); cached != nil {
+        r.Data.Response = cached
+        
+        // Stops any deeper 'In' hooks from running.
+        // Execution immediately turns around and begins the 'Out' phase!
+        r.Terminate() 
+    }
+    return nil
 })
 ```
 
 ---
 
-## Memory Reuse & Pooling (Zero Allocation)
+## 💡 Real-World Applications
 
-For high-throughput systems (such as Kafka consumer loops processing millions of events per second), allocation overhead can be a bottleneck. 
-
-uflow's `Runner[T]` can be pooled using `sync.Pool` by resetting its state in-place:
+### 🌐 HTTP Middleware (Tracing & Telemetry)
+The U-Shape is the ultimate pattern for HTTP requests. You can inject a Trace ID on the way `In`, and calculate total response duration on the way `Out`.
 
 ```go
-var executionPool = sync.Pool{
+type RequestState struct {
+    Req       *http.Request
+    Res       http.ResponseWriter
+    StartTime time.Time
+}
+
+telemetryStep := &uflow.StepFunc[*RequestState]{
+    Id: "Telemetry",
+    InFunc: func(r *uflow.Runner[*RequestState]) error {
+        r.Data.StartTime = time.Now()
+        r.Data.Req.Header.Set("X-Trace-ID", generateUUID())
+        return nil
+    },
+    OutFunc: func(r *uflow.Runner[*RequestState]) error {
+        duration := time.Since(r.Data.StartTime)
+        log.Printf("Request completed in %v", duration)
+        return nil
+    },
+}
+```
+
+### 📩 Kafka Consumers & Producers
+When processing event streams, you want to guarantee that a message is acknowledged *only* if the pipeline succeeds, and DLQ'd (Dead-Letter Queue) if it fails.
+
+```go
+kafkaAckStep := &uflow.StepFunc[*MessageState]{
+    Id: "KafkaAck",
+    // Ack the message on the way OUT (Success)
+    OutFunc: func(r *uflow.Runner[*MessageState]) error {
+        r.Data.Message.Ack()
+        return nil
+    },
+    // Nack or DLQ the message on CATCH (Failure)
+    CatchFunc: func(r *uflow.Runner[*MessageState], err error) error {
+        sendToDLQ(r.Data.Message, err)
+        r.Data.Message.Nack()
+        
+        // Return nil to tell uflow we've handled the error gracefully!
+        return nil 
+    },
+}
+```
+
+### 🪵 Log Configuration (Context Enrichment)
+You can inject a highly-contextual logger into the pipeline state, use it deep within your business logic, and effortlessly tear it down or sync it at the end.
+
+```go
+loggingStep := &uflow.StepFunc[*AppState]{
+    Id: "Logger",
+    InFunc: func(r *uflow.Runner[*AppState]) error {
+        // Create a scoped logger
+        r.Data.Logger = baseLogger.With("trace", r.Data.TraceID)
+        return nil
+    },
+    OutFunc: func(r *uflow.Runner[*AppState]) error {
+        // Guarantee logs are flushed to disk before the pipeline fully exits
+        r.Data.Logger.Sync()
+        return nil
+    },
+}
+```
+
+---
+
+## ⚡ Memory Reuse & Pooling (Zero Allocation)
+
+For high-throughput systems (such as consuming millions of events per second), allocation overhead can be a bottleneck. 
+
+uflow's `Runner[T]` can be pooled using standard `sync.Pool` by resetting its state in-place:
+
+```go
+var runnerPool = sync.Pool{
 	New: func() any {
-		return &uflow.Runner[MyState]{}
+		return &uflow.Runner[*MyState]{}
 	},
 }
 
-func HandleBatch(ctx context.Context, group []uflow.Step[MyState], data MyState) error {
-	// 1. Get execution manager from pool
-	exec := executionPool.Get().(*uflow.Runner[MyState])
+func ProcessEvent(ctx context.Context, flow uflow.Step[*MyState], data *MyState) error {
+	// 1. Get runner from pool
+	r := runnerPool.Get().(*uflow.Runner[*MyState])
 	
-	// 2. Reset in-place
-	exec.Reset(ctx, group, data)
+	// 2. Reset in-place (Flattens the flow automatically)
+	r.Reset(ctx, []uflow.Step[*MyState]{flow}, data)
 	
 	// 3. Run execution
-	err := exec.Execute()
+	err := r.Execute()
 	
 	// 4. Put back to pool
-	executionPool.Put(exec)
+	runnerPool.Put(r)
 	return err
 }
 ```

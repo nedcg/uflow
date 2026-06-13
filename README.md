@@ -96,7 +96,21 @@ auditStep := uflow.Out("Audit", func(r *uflow.Runner[*Context]) error {
 ### 4. Group (Pipeline Flattening)
 You can bundle multiple steps into a cohesive, reusable module using `uflow.NewGroup`. 
 
-Groups are natively flattened by the `Runner`. This guarantees the U-shape "onion" ordering is perfectly preserved across boundaries.
+Groups are natively flattened by the `Runner` at runtime. This guarantees the U-shape "onion" ordering is perfectly preserved across boundaries without any nested execution overhead.
+
+```text
+    [ Nested Definition ]               [ Flattened Execution ]
+
+┌────────────────────────┐             ┌────────────────────────┐
+│ telemetryStep          │             │ telemetryStep          │
+├────────────────────────┤             ├────────────────────────┤
+│ securityModule         │  flattened  │ rateLimitStep          │
+│   (Group of 3 steps)   ├───▶──────▶──┤ authStep               │
+├────────────────────────┤             │ corsStep               │
+│ businessLogicStep      │             ├────────────────────────┤
+└────────────────────────┘             │ businessLogicStep      │
+                                       └────────────────────────┘
+```
 
 ```go
 // Group multiple steps into a cohesive block
